@@ -43,6 +43,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+
 DAC_HandleTypeDef hdac;
 DMA_HandleTypeDef hdma_dac_ch1;
 
@@ -50,7 +52,7 @@ SD_HandleTypeDef hsd;
 
 TIM_HandleTypeDef htim6;
 
-UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 #define HALF_DATASIZE	512
@@ -59,6 +61,14 @@ UART_HandleTypeDef huart1;
 	FIL myFILE;
 volatile FRESULT fresult;
 static volatile uint8_t* INPUT_DATA;
+// Motion
+static volatile uint8_t Motion = 0;
+static volatile uint8_t Pre_Motion = 0;
+// Speaking
+static volatile uint8_t Speaking = 0;
+// Dark mode
+static volatile uint16_t ADC_value = 0;
+static volatile uint8_t Dark_mode = 0;
 	//	Status variable
 static volatile	uint8_t MODE = 0;//  0: Stand by		1: Audio
 static volatile	uint8_t UPPERCplt = 0;
@@ -75,8 +85,7 @@ static volatile uint32_t Read_Counter;
 static volatile uint32_t Transfer_Counter;
 static volatile uint32_t Read_Pointer;
 static volatile uint32_t R;
-	char file2Path[] = "soobin.wav";
-	char file3Path[] = "Despacito.wav";
+	char file1Path[] = "soobin.wav";
 static volatile	uint8_t buffer[100];
 static volatile	uint8_t buffer[100];
 /* USER CODE END PV */
@@ -86,9 +95,10 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_SDIO_SD_Init(void);
-static void MX_USART1_UART_Init(void);
 static void MX_DAC_Init(void);
 static void MX_TIM6_Init(void);
+static void MX_USART3_UART_Init(void);
+static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 #ifdef __GNUC__
   /* With GCC/RAISONANCE, small printf (option LD Linker->Libraries->Small printf
@@ -102,7 +112,7 @@ static void MX_TIM6_Init(void);
 {
   /* Place your implementation of fputc here */
   /* e.g. write a character to the USART */
-	HAL_UART_Transmit(&huart1, (uint8_t*)&ch,1,100);
+	HAL_UART_Transmit(&huart3, (uint8_t*)&ch,1,100);
 
   /* Loop until the end of transmission */
 
@@ -191,61 +201,127 @@ int main(void)
   MX_DMA_Init();
   MX_SDIO_SD_Init();
   MX_FATFS_Init();
-  MX_USART1_UART_Init();
   MX_DAC_Init();
   MX_TIM6_Init();
+  MX_USART3_UART_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-	HAL_TIM_Base_Start(&htim6); // Start DMA Timer Trigger 
+
+	HAL_GPIO_WritePin(output_GPIO_Port, output_Pin, GPIO_PIN_SET);
+	HAL_ADC_Start( &hadc1);
 		/* Read Data from SD to FULL  DAC Buffer*/
 			fresult = f_mount( &myFATFS,"", 1);
 			if( fresult == FR_OK)
 			{
-			printf("MOUTN SD OK\r\n");
+				printf("MOUTN SD OK\r\n");
 			}	
-			fresult = f_open( &myFILE, file3Path, FA_READ);
-			if( fresult == FR_OK)
-			{
-				printf("OPEN FILE OK\r\n");
-				Size_of_File = f_size( &myFILE) - 16;
-				Read_Pointer = 16;
-				f_lseek( &myFILE, Read_Pointer);
-				Read_Counter = Size_of_File/HALF_DATASIZE + 1;
-				R = Size_of_File - Size_of_File/HALF_DATASIZE*HALF_DATASIZE;
-				Transfer_Counter = Read_Counter;
-				printf("File name: %s\r\n", file3Path);
-				printf("Size of file: %d  Byte\r\n", Size_of_File);
-				printf("R: %d  Byte\r\n", R);
-				printf("Number of Block: %d  Block\r\n\r\n", Read_Counter);
-				
-				INPUT_DATA = &DAC_VALUE[0];
-				f_read( &myFILE,(uint8_t*) INPUT_DATA , HALF_DATASIZE, &readByte);
-				Read_Counter--;
-				
-				Read_Pointer += HALF_DATASIZE ;
-				f_lseek( &myFILE, Read_Pointer);
-				INPUT_DATA = &DAC_VALUE[HALF_DATASIZE];
-				f_read( &myFILE,(uint8_t*) INPUT_DATA , HALF_DATASIZE, &readByte);
-				Read_Counter--;
-			}
-		/* Start DMA & DAC - Audio */
-			MODE = 1;
-			HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*) DAC_VALUE, FULL_DATASIZE, DAC_ALIGN_8B_R); 
+			fresult = f_open( &myFILE, file1Path, FA_READ);
+						if( fresult == FR_OK)
+					{
+						printf("OPEN FILE OK\r\n");
+						Size_of_File = f_size( &myFILE) - 16;
+						Read_Pointer = 16;
+						f_lseek( &myFILE, Read_Pointer);
+						Read_Counter = Size_of_File/HALF_DATASIZE + 1;
+						R = Size_of_File - Size_of_File/HALF_DATASIZE*HALF_DATASIZE;
+						Transfer_Counter = Read_Counter;
+						printf("File name: %s\r\n", file1Path);
+						printf("Size of file: %d  Byte\r\n", Size_of_File);
+						printf("R: %d  Byte\r\n", R);
+						printf("Number of Block: %d  Block\r\n\r\n", Read_Counter);
+						
+						INPUT_DATA = &DAC_VALUE[0];
+						f_read( &myFILE,(uint8_t*) INPUT_DATA , HALF_DATASIZE, &readByte);
+						Read_Counter--;
+						
+						Read_Pointer += HALF_DATASIZE ;
+						f_lseek( &myFILE, Read_Pointer);
+						INPUT_DATA = &DAC_VALUE[HALF_DATASIZE];
+						f_read( &myFILE,(uint8_t*) INPUT_DATA , HALF_DATASIZE, &readByte);
+						Read_Counter--;
+								/* Start DMA & DAC - Audio */
+						MODE = 1;
+						UPPERCplt = 0;
+						LOWERCplt = 0;
+						HAL_TIM_Base_Start(&htim6); // Start DMA Timer Trigger 
+						HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*) DAC_VALUE, FULL_DATASIZE, DAC_ALIGN_8B_R); 
+					}
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* USER CODE END WHILE */
 
+    /* USER CODE END WHILE */
+	
     /* USER CODE BEGIN 3 */
+		Pre_Motion = Motion;
+		Motion = HAL_GPIO_ReadPin(sensor_motion_GPIO_Port, sensor_motion_Pin);
+
+		ADC_value = HAL_ADC_GetValue( &hadc1);
+		
+		
+		if( Motion == 1 && Pre_Motion == 0 && MODE == 0)
+		{
+				Speaking = 1;
+			if( ADC_value > 2500)
+			{
+				Dark_mode = 1;
+				HAL_GPIO_WritePin(output_GPIO_Port, output_Pin, GPIO_PIN_RESET); // Turm on the light
+			}
+		}
+		if( Motion == 0 && Pre_Motion == 1 && Dark_mode == 1)
+		{
+				Dark_mode = 0;
+				HAL_GPIO_WritePin(output_GPIO_Port, output_Pin, GPIO_PIN_SET);
+		}
+		
+		if( Speaking)
+		{
+						fresult = f_open( &myFILE, file1Path, FA_READ);
+						if( fresult == FR_OK)
+					{
+						printf("OPEN FILE OK\r\n");
+						Size_of_File = f_size( &myFILE) - 16;
+						Read_Pointer = 16;
+						f_lseek( &myFILE, Read_Pointer);
+						Read_Counter = Size_of_File/HALF_DATASIZE + 1;
+						R = Size_of_File - Size_of_File/HALF_DATASIZE*HALF_DATASIZE;
+						Transfer_Counter = Read_Counter;
+						printf("File name: %s\r\n", file1Path);
+						printf("Size of file: %d  Byte\r\n", Size_of_File);
+						printf("R: %d  Byte\r\n", R);
+						printf("Number of Block: %d  Block\r\n\r\n", Read_Counter);
+						
+						INPUT_DATA = &DAC_VALUE[0];
+						f_read( &myFILE,(uint8_t*) INPUT_DATA , HALF_DATASIZE, &readByte);
+						Read_Counter--;
+						
+						Read_Pointer += HALF_DATASIZE ;
+						f_lseek( &myFILE, Read_Pointer);
+						INPUT_DATA = &DAC_VALUE[HALF_DATASIZE];
+						f_read( &myFILE,(uint8_t*) INPUT_DATA , HALF_DATASIZE, &readByte);
+						Read_Counter--;
+								/* Start DMA & DAC - Audio */
+						MODE = 1;
+						UPPERCplt = 0;
+						LOWERCplt = 0;
+						HAL_TIM_Base_Start(&htim6); // Start DMA Timer Trigger 
+						HAL_DAC_Start_DMA(&hdac, DAC_CHANNEL_1, (uint32_t*) DAC_VALUE, FULL_DATASIZE, DAC_ALIGN_8B_R); 
+						Speaking = 0;
+					}
+		}
 		if( MODE == 1)
 		{
 			Process_Data();
 		}
 		else
 		{
-			HAL_DAC_Stop_DMA( &hdac, DAC_CHANNEL_1);
+			HAL_DAC_Stop_DMA( &hdac, DAC_CHANNEL_1); // Stop DMA --- Manitude
+			HAL_TIM_Base_Stop( &htim6); // Stop TIMER --- Frequency
+			f_close( &myFILE); // Close Song file
 		}
 			
 		
@@ -261,6 +337,7 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the CPU, AHB and APB busses clocks 
   */
@@ -288,6 +365,57 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+  /** Common config 
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Regular Channel 
+  */
+  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
 }
 
 /**
@@ -376,7 +504,7 @@ static void MX_TIM6_Init(void)
   htim6.Instance = TIM6;
   htim6.Init.Prescaler = 0;
   htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim6.Init.Period = 816;
+  htim6.Init.Period = 815;
   htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
   {
@@ -395,35 +523,35 @@ static void MX_TIM6_Init(void)
 }
 
 /**
-  * @brief USART1 Initialization Function
+  * @brief USART3 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_USART1_UART_Init(void)
+static void MX_USART3_UART_Init(void)
 {
 
-  /* USER CODE BEGIN USART1_Init 0 */
+  /* USER CODE BEGIN USART3_Init 0 */
 
-  /* USER CODE END USART1_Init 0 */
+  /* USER CODE END USART3_Init 0 */
 
-  /* USER CODE BEGIN USART1_Init 1 */
+  /* USER CODE BEGIN USART3_Init 1 */
 
-  /* USER CODE END USART1_Init 1 */
-  huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
-  huart1.Init.WordLength = UART_WORDLENGTH_8B;
-  huart1.Init.StopBits = UART_STOPBITS_1;
-  huart1.Init.Parity = UART_PARITY_NONE;
-  huart1.Init.Mode = UART_MODE_TX_RX;
-  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart1) != HAL_OK)
+  /* USER CODE END USART3_Init 1 */
+  huart3.Instance = USART3;
+  huart3.Init.BaudRate = 115200;
+  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.StopBits = UART_STOPBITS_1;
+  huart3.Init.Parity = UART_PARITY_NONE;
+  huart3.Init.Mode = UART_MODE_TX_RX;
+  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart3) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USART1_Init 2 */
+  /* USER CODE BEGIN USART3_Init 2 */
 
-  /* USER CODE END USART1_Init 2 */
+  /* USER CODE END USART3_Init 2 */
 
 }
 
@@ -434,6 +562,7 @@ static void MX_DMA_Init(void)
 {
   /* DMA controller clock enable */
   __HAL_RCC_DMA2_CLK_ENABLE();
+
   /* DMA interrupt init */
   /* DMA2_Channel3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Channel3_IRQn, 0, 0);
@@ -453,17 +582,24 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(output_GPIO_Port, output_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PA8 */
-  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  /*Configure GPIO pin : output_Pin */
+  GPIO_InitStruct.Pin = output_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  HAL_GPIO_Init(output_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : sensor_motion_Pin */
+  GPIO_InitStruct.Pin = sensor_motion_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(sensor_motion_GPIO_Port, &GPIO_InitStruct);
 
 }
 
